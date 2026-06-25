@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SCC FLAP AND WINS!</title>
+    <style>
+        :root {
+            --primary: #4e54c8;
+            --secondary: #8f94fb;
+            --dark: #2c3e50;
+            --light: #ecf0f1;
+        }
+        body {
+            margin: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(to right, var(--primary), var(--secondary));
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            color: var(--dark);
+            padding: 20px;
+        }
+        h1 {
+            color: white;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+            margin-bottom: 10px;
+            font-size: 2.5rem;
+            text-align: center;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 15px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+            width: 100%;
+            max-width: 400px;
+            box-sizing: border-box;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        input, button {
+            width: 100%;
+            padding: 12px;
+            margin: 8px 0;
+            border-radius: 8px;
+            border: 1px solid #ccc;
+            box-sizing: border-box;
+            font-size: 16px;
+        }
+        button {
+            background: #27ae60;
+            color: white;
+            border: none;
+            font-weight: bold;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+        button:hover {
+            background: #219653;
+        }
+        #game-container {
+            display: none;
+            position: relative;
+        }
+        canvas {
+            border-radius: 10px;
+            box-shadow: 0 8px 16px rgba(0,0,0,0.3);
+            background: #70c5ce;
+            display: block;
+        }
+        .leaderboard-box {
+            margin-top: 20px;
+            background: rgba(255, 255, 255, 0.9);
+            padding: 15px;
+            border-radius: 10px;
+            width: 100%;
+            max-width: 400px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+        th, td {
+            padding: 8px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        th { background-color: #f2f2f2; }
+        .admin-panel {
+            margin-top: 30px;
+            background: rgba(0,0,0,0.1);
+            padding: 10px;
+            border-radius: 8px;
+            color: white;
+            font-size: 12px;
+        }
+        .admin-btn {
+            background: #2980b9;
+            padding: 5px 10px;
+            font-size: 12px;
+            width: auto;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>SCC FLAP AND WINS!</h1>
+
+    <div id="registration" class="container">
+        <h3>Enter details to Play & Win!</h3>
+        <form id="regForm">
+            <input type="text" id="playerName" placeholder="Full Name" required>
+            <input type="tel" id="playerPhone" placeholder="Phone Number" required>
+            <input type="text" id="playerWork" placeholder="Work Place / Company" required>
+            <button type="submit">START GAME</button>
+        </form>
+    </div>
+
+    <div id="game-container">
+        <canvas id="gameCanvas" width="360" height="500"></canvas>
+    </div>
+
+    <div class="leaderboard-box">
+        <h3 style="margin:0; color:#2c3e50;">🏆 Today's Top Players</h3>
+        <table id="leaderboardTable">
+            <thead>
+                <tr>
+                    <th>Rank</th>
+                    <th>Name</th>
+                    <th>Company</th>
+                    <th>Score</th>
+                </tr>
+            </thead>
+            <tbody>
+                </tbody>
+        </table>
+    </div>
+
+    <div class="admin-panel">
+        <p><strong>Booth Admin Panel:</strong> Use this button at the end of the event to download your leads.</p>
+        <button class="admin-btn" onclick="exportData()">📥 Export Player Data (CSV)</button>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        let currentPlayer = null;
+        let gameData = JSON.parse(localStorage.getItem('scc_game_data')) || [];
+
+        // UI Elements
+        const regScreen = document.getElementById('registration');
+        const gameContainer = document.getElementById('game-container');
+        const regForm = document.getElementById('regForm');
+
+        // Form Submit
+        regForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            currentPlayer = {
+                name: document.getElementById('playerName').value,
+                phone: document.getElementById('playerPhone').value,
+                work: document.getElementById('playerWork').value,
+                score: 0,
+                date: new Date().toLocaleDateString()
+            };
+            regScreen.style.display = 'none';
+            gameContainer.style.display = 'block';
+            resetGame();
+            gameLoop();
+        });
+
+        // Game Variables
+        let bird, pipes, score, gameOver, frames;
+        const gravity = 0.25;
+
+        function resetGame() {
+            bird = { x: 50, y: 150, velocity: 0, radius: 14 };
+            pipes = [];
+            score = 0;
+            gameOver = false;
+            frames = 0;
+        }
+
+        // Controls
+        window.addEventListener('keydown', function(e) {
+            if (e.code === 'Space' && currentPlayer) {
+                if (gameOver) { resetGame(); gameLoop(); }
+                else { bird.velocity = -5.5; }
+            }
+        });
+        canvas.addEventListener('touchstart', function() {
+            if (currentPlayer) {
+                if (gameOver) { resetGame(); gameLoop(); }
+                else { bird.velocity = -5.5; }
+            }
+        });
+
+        function gameLoop() {
+            if (gameOver) {
+                savePlayerData();
+                updateLeaderboard();
+                drawGameOver();
+                return;
+            }
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw Background Gradient
+            let bgGrad = ctx.createLinearGradient(0, 0, 0, canvas.height);
+            bgGrad.addColorStop(0, '#3a7bd5');
+            bgGrad.addColorStop(1, '#3a6073');
+            ctx.fillStyle = bgGrad;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Bird Physics & Draw
+            bird.velocity += gravity;
+            bird.y += bird.velocity;
+            
+            // Modern Glow Bird
+            ctx.beginPath();
+            ctx.arc(bird.x, bird.y, bird.radius, 0, Math.PI * 2);
+            ctx.fillStyle = '#f1c40f';
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = '#f39c12';
+            ctx.fill();
+            ctx.shadowBlur = 0; // reset shadow
+            
+            // Eye
+            ctx.beginPath();
+            ctx.arc(bird.x + 6, bird.y - 4, 3, 0, Math.PI * 2);
+            ctx.fillStyle = 'white';
+            ctx.fill();
+
+            // Pipes Logic
+            if (frames % 90 === 0) {
+                let gap = 120;
+                let minHeight = 40;
+                let maxHeight = canvas.height - gap - minHeight - 40;
+                let height = Math.floor(Math.random() * (maxHeight - minHeight + 1)) + minHeight;
+                
+                pipes.push({
+                    x: canvas.width,
+                    top: height,
+                    bottom: canvas.height - height - gap
+                });
+            }
+
+            for (let i = pipes.length - 1; i >= 0; i--) {
+                pipes[i].x -= 2.5;
+
+                // Shiny Metallic Green Pipes
+                let pipeGrad = ctx.createLinearGradient(pipes[i].x, 0, pipes[i].x + 50, 0);
+                pipeGrad.addColorStop(0, '#2ecc71');
+                pipeGrad.addColorStop(0.5, '#a3e4d7');
+                pipeGrad.addColorStop(1, '#27ae60');
+                ctx.fillStyle = pipeGrad;
+
+                // Top Pipe
+                ctx.fillRect(pipes[i].x, 0, 50, pipes[i].top);
+                // Bottom Pipe
+                ctx.fillRect(pipes[i].x, canvas.height - pipes[i].bottom, 50, pipes[i].bottom);
+
+                // Collision Detection
+                if (bird.x + bird.radius > pipes[i].x && bird.x - bird.radius < pipes[i].x + 50) {
+                    if (bird.y - bird.radius < pipes[i].top || bird.y + bird.radius > canvas.height - pipes[i].bottom) {
+                        gameOver = true;
+                    }
+                }
+
+                // Score Tracking
+                if (pipes[i].x + 50 === bird.x) {
+                    score++;
+                }
+
+                // Remove off-screen pipes
+                if (pipes[i].x + 50 < 0) pipes.splice(i, 1);
+            }
+
+            // Floor/Ceiling collisions
+            if (bird.y + bird.radius >= canvas.height || bird.y - bird.radius <= 0) {
+                gameOver = true;
+            }
+
+            // Draw Score
+            ctx.fillStyle = 'white';
+            ctx.font = 'bold 30px Arial';
+            ctx.fillText(score, canvas.width / 2 - 10, 50);
+
+            frames++;
+            requestAnimationFrame(gameLoop);
+        }
+
+        function drawGameOver() {
+            ctx.fillStyle = 'rgba(0,0,0,0.6)';
+            ctx.fillRect(0,0,canvas.width,canvas.height);
+            ctx.fillStyle = 'white';
+            ctx.font = 'bold 28px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText("GAME OVER", canvas.width/2, canvas.height/2 - 30);
+            ctx.font = '18px Arial';
+            ctx.fillText(`Your Score: ${score}`, canvas.width/2, canvas.height/2 + 10);
+            ctx.fillStyle = '#2ecc71';
+            ctx.fillText("Tap / Space to Try Again", canvas.width/2, canvas.height/2 + 50);
+            ctx.textAlign = 'left'; // reset
+        }
+
+        function savePlayerData() {
+            // Only update if current score is higher than their previous attempt in this session
+            if (score > currentPlayer.score) {
+                currentPlayer.score = score;
+                // Remove older entry if exists to avoid duplicates
+                gameData = gameData.filter(p => !(p.phone === currentPlayer.phone && p.date === currentPlayer.date));
+                gameData.push(currentPlayer);
+                localStorage.setItem('scc_game_data', JSON.stringify(gameData));
+            }
+        }
+
+        function updateLeaderboard() {
+            const today = new Date().toLocaleDateString();
+            // Filter for today only, and sort descending
+            let todayData = gameData
+                .filter(p => p.date === today)
+                .sort((a, b) => b.score - a.score)
+                .slice(0, 5); // top 5
+
+            const tbody = document.querySelector('#leaderboardTable tbody');
+            tbody.innerHTML = '';
+            
+            todayData.forEach((player, index) => {
+                let row = `<tr>
+                    <td><strong>${index + 1}</strong></td>
+                    <td>${player.name}</td>
+                    <td>${player.work}</td>
+                    <td><strong>${player.score}</strong></td>
+                </tr>`;
+                tbody.innerHTML += row;
+            });
+        }
+
+        // Export data to CSV function
+        function exportData() {
+            if (gameData.length === 0) {
+                alert("No player data to export yet!");
+                return;
+            }
+            let csvContent = "data:text/csv;charset=utf-8,";
+            csvContent += "Date,Name,Phone,Workplace,Highest Score\n";
+            
+            gameData.forEach(p => {
+                csvContent += `"${p.date}","${p.name}","${p.phone}","${p.work}",${p.score}\n`;
+            });
+
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", `SCC_Flap_Wins_Leads_${new Date().toISOString().slice(0,10)}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        // Initial leaderboard load
+        updateLeaderboard();
+    </script>
+</body>
+</html>
